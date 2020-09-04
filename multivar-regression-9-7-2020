@@ -1,0 +1,98 @@
+
+
+set.seed(123)
+
+library(MASS)
+
+p=6 #self-defined
+
+####### Generating a random positive-definite matrix #######
+### positive eigenvalues generated from a uniform distribution ### 
+ev1 <- runif(p, 0, 10) # p eigenvalues
+posdefinite <- function (n, ev) 
+{
+  pf <- matrix(ncol=n, rnorm(n^2))
+  decomp <- qr(pf)
+  Q <- qr.Q(decomp) 
+  R <- qr.R(decomp)
+  d <- diag(R)
+  ph <- d / abs(d)
+  O <- Q %*% diag(ph)
+  pf <- t(O) %*% diag(ev) %*% O
+  return(pf)
+}
+pdmat <- posdefinite(n=p, ev=ev1)   #since the wanted sigma matrix is p by p
+#pdmat
+#eigen(pdmat)$val
+
+### X1, X2, … , Xn be i.i.d. ~ Np(0,Sigma) 
+Sigma <- pdmat
+xmulti <- mvrnorm(n=1000, rep(0, p), Sigma, empirical = FALSE)
+class(xmulti)
+### Y also follows multivarite normal with mean=XB and Captical Sigma=SigmaI
+I <- diag(x=1, nrow=1000, ncol=1000)
+Beta <- runif(n=p, 0, 1)
+mu <- xmulti%*%Beta
+sig <- 0.33
+ymulti <- mvrnorm(n=1, mu, Sigma=sig*I, empirical = FALSE)   #simple case for one response for each
+class(ymulti)
+
+xy <- data.frame(cbind(xmulti, ymulti))
+colnames(xy) <- c('x1', 'x2', 'x3', 'x4', 'x5', 'x6', 'y')
+
+### one step regression
+fit1 <- lm(y ~ x1 + x2 + x3 +x4 +x5 +x6, data=xy) 
+#coef(fit1)[7]  #beta_p in one tep regression
+
+### two step regression
+#regress y on x_1 to x_p-1, get residual
+fit2_1 <- lm(y ~ x1 + x2 + x3 +x4 +x5, data=xy)
+y_r <- resid(fit2_1)
+#regress x_p on x_1 to x_p-1, get residual
+fit2_2 <- lm(x6 ~ x1 + x2 + x3 +x4 +x5, data=xy)
+x6_r <- resid(fit2_2)
+#regress with residuals, y_r on x6_r 
+yx6resid <- data.frame(cbind(y_r, x6_r))
+fit2_3 <- lm(y_r ~ x6_r, data=yx6resid)
+#coef(fit2_3)[2]
+
+############### verify the equivalence of one stage multivariate regression and 2-stage regression
+coef(fit1)[7] 
+coef(fit2_3)[2]
+#Yes, the same
+
+
+### linear regression as successive orthogonalization
+#initialize z0=x0=1
+z0 <- rep(1, n=1000)
+z <- z0
+
+#for j=1,2,...,p, regress x_j on z0,z1,...,z_j-1
+a <- xy[, 1]
+df <- data.frame(cbind(z, a) )
+fit <- lm(a ~ . , data = df)
+z <- resid(fit)
+
+for (j in 2:p) {
+  df <- df[, -j]
+  a <- xy[, j]
+  df <- data.frame(cbind(df, z, a) )
+  fit <- lm(a ~ . , data = df)
+  z <- resid(fit)
+}
+z_p <- z
+#regress y on the residual z_p to give the estimate 
+xyz <- cbind(xy, z_p)
+fit_so <- lm(y ~ z_p, data = xyz) 
+#coef(fit_so)[2]
+
+################ verify the equivalence of multivariate regression to 
+################ the effects obtained from successive orthogonalization
+coef(fit1)[7] 
+coef(fit_so)[2]
+#Yes, the same
+
+
+
+
+
