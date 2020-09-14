@@ -1,0 +1,256 @@
+
+
+library(tidyverse)
+library(caret)
+library(glmnet)
+library(pls)
+
+library(MASS)
+
+
+set.seed(123)
+
+
+################### implement cyclic coordinate descent algorithm for lasso
+################### compare your results with glmnet (if you use R) or with scikit learn (if you use python)
+### cyclic coordinate descent algorithm for LASSO
+
+myfunction <- function(x, y, lambda, ite)  {
+  #intercept <- rep(1, length(x[,1]))
+  #x <- cbind(intercept, x)
+  N <- length(y)
+  #self define initials for beta
+  beta <- rep(1, length(x[1,]))  #number of predictors here
+  beta0 <- 1
+  
+  for (s in 1:ite) {
+    beta_post <- beta
+    
+    beta0_post <- beta0
+    xm <- apply(x, 2, mean)
+    for (xi in 1:length(beta)) { xm[xi] = xm[xi] * beta[xi]}
+    beta0 <- mean(y) - sum(xm)
+    
+    for (j in 1:length(x[1,])) {
+      sumX_ij2 <- 0
+      numerator_1 <- 0
+      xx <- x[,-j]
+      betabeta <- beta[-j]
+      for (ii in 1:N) {
+        sumX_ij2 = sumX_ij2 + x[ii,j]^2
+      }
+      for (i in 1:N) {
+        sumXXB_ijj <- 0
+        for (jj in 1:length(xx[1,])) {
+          sumXXB_ijj = sumXXB_ijj +xx[i,jj]*betabeta[jj]
+        }
+        numerator_1 <- numerator_1 + x[i,j] * ( y[i] - beta0 - sumXXB_ijj )    #
+      }
+      sumXY <- numerator_1/N
+      b_plus <- (sumXY - lambda)/(sumX_ij2/N)
+      b_minus <- (sumXY + lambda)/(sumX_ij2/N)
+      
+      if ( b_plus > 0 ) {  beta_tuta <- b_plus } 
+      else if ( b_minus < 0 ) { beta_tuta <- b_minus } 
+      else  {beta_tuta <- 0}  #if (sumXY>=-lambda & sumXY<=lambda)
+      
+      beta[j] <- beta_tuta
+    } # end of cycling through j predictors
+    
+  }  #end of iterations
+  beta <- c(beta0, beta )
+  return(beta)
+}  #end of functions
+
+
+##### compare result from glmnet
+### 1) first try, use R built-in data "mtcars"
+data(mtcars)
+fit1 <- myfunction(x=as.matrix(mtcars[-1]), y=mtcars[,1], lambda=1.55, ite=5000)
+fit1
+fit.glmnet1 <- glmnet(as.matrix(mtcars[-1]), mtcars[,1], lambda=1.55, standardize = FALSE)
+coef(fit.glmnet1)
+## same
+#fit1 <- myfunction(x=as.matrix(mtcars[-1]), y=mtcars[,1], lambda=cv.glmnet(as.matrix(mtcars[-1]), mtcars[,1])$lambda.1se, ite=5000)
+#fit1 
+#fit.glmnet1 <- glmnet(as.matrix(mtcars[-1]), mtcars[,1], lambda=cv.glmnet(as.matrix(mtcars[-1]), mtcars[,1])$lambda.1se, standardize = FALSE )
+#coef(fit.glmnet1)  #ouput at best lambda
+
+f1 <- function(x) { x-mean(x) }
+f2 <- function(x) { x / sqrt(sum(x^2)/length(mtcars[,1])) }
+X_centered <- apply(as.matrix(mtcars[-1]), 2, f1 )
+xs <- apply(X_centered, 2, f2 )  #standardize X, then fit
+fit1 <- myfunction(x=xs, y=mtcars[,1], lambda=1.55, ite=5000)
+fit1
+fit.glmnet1 <- glmnet(xs, mtcars[,1], lambda=1.55 )
+coef(fit.glmnet1)
+fit.glmnet1 <- glmnet(xs, mtcars[,1], lambda=1.55, standardize = FALSE)
+coef(fit.glmnet1)
+## same
+
+### 2) second try, use simulated data
+# generate data
+n <- 100    # Number of observations
+p <- 20    # Number of predictors included in model
+CovMatrix <- outer(1:p, 1:p, function(x,y) {0.7^abs(x-y)})
+x <- mvrnorm(n, rep(0,p), CovMatrix)
+y <- 8 * apply(x[, 1:2], 1, sum) + 5 * apply(x[, 3:5], 1, sum) + apply(x[, 6:9], 1, sum) + rnorm(n)
+#fit
+fit2 <- myfunction(x, y=y, lambda=3, ite=1000)
+fit2
+fit.glmnet2 <- glmnet(x, y, lambda=3, standardize = FALSE)
+coef(fit.glmnet2)
+## same
+
+f1 <- function(x) { x-mean(x) }
+f2 <- function(x) { x / sqrt(sum(x^2)/length(mtcars[,1])) }
+X_centered <- apply(x, 2, f1 )
+xs <- apply(X_centered, 2, f2 )  #standardize X, then fit
+fit2 <- myfunction(x=xs, y=y, lambda=3, ite=5000)
+fit2
+fit.glmnet2 <- glmnet(xs, y, lambda=3 )
+coef(fit.glmnet2)
+## same
+
+##in conclusion, my funtion gives the same results as glmnet()
+
+
+
+################### implement Partial least square
+x=as.matrix(mtcars[-1])
+y=mtcars[,1]
+
+x <- apply(as.matrix(mtcars[-1]), 2, scale)
+y <- scale(mtcars[,1])
+
+z_collection <- NULL
+
+for (m in 1:length(x[1,]) ) {
+    #initialize xj_0=xj, j=1,2, ..., p; p columns
+    z_m <- NULL
+    x_post <- x
+    
+    for (i in 1:length(x[1,]) ) {
+      x0 <- x_post[, i]
+      theta_m <- t(x0)%*%y
+      z_m <- rbind(z_m, theta_m%*%x0)
+    }
+    z_ms <- apply(z_m, 2, sum)
+    
+#    x[, 1] <- x_post[, 1] - as.vector( (t(z_ms)%*%x_post[, 1])/(t(z_ms)%*%z_ms) ) * z_ms
+#    t(x[, 1])%*%z_ms
+#    x[, 2] <- x_post[, 2] - as.vector( (t(z_ms)%*%x_post[, 2])/(t(z_ms)%*%z_ms) ) * z_ms
+#    t(x[, 2])%*%z_ms
+#    x[, 3] <- x_post[, 3] - as.vector( (t(z_ms)%*%x_post[, 3])/(t(z_ms)%*%z_ms) ) * z_ms
+#    t(x[, 3])%*%z_ms
+
+    for (j in 1:length(x[1,]) ) {
+    #update
+    x[, j] <- x_post[, j] - as.vector( (t(z_ms)%*%x_post[, j])/(t(z_ms)%*%z_ms) ) * z_ms
+    }
+    
+     z_collection <- rbind(z_collection, z_ms)
+}
+
+##check orthogonal, only show some here
+t(z_collection[1,])%*%z_collection[10,]
+t(z_collection[2,])%*%z_collection[10,]
+t(z_collection[3,])%*%z_collection[10,]
+t(z_collection[4,])%*%z_collection[10,]
+t(z_collection[5,])%*%z_collection[10,]
+t(z_collection[6,])%*%z_collection[10,]
+t(z_collection[7,])%*%z_collection[10,]
+t(z_collection[8,])%*%z_collection[10,]
+t(z_collection[9,])%*%z_collection[10,]
+
+t(z_collection[1,])%*%z_collection[7,]
+t(z_collection[2,])%*%z_collection[7,]
+t(z_collection[3,])%*%z_collection[7,]
+t(z_collection[4,])%*%z_collection[7,]
+t(z_collection[5,])%*%z_collection[7,]
+t(z_collection[6,])%*%z_collection[7,]
+t(z_collection[8,])%*%z_collection[7,]
+t(z_collection[9,])%*%z_collection[7,]
+
+t(z_collection[1,])%*%z_collection[3,]
+t(z_collection[2,])%*%z_collection[3,]
+t(z_collection[4,])%*%z_collection[3,]
+t(z_collection[5,])%*%z_collection[3,]
+t(z_collection[6,])%*%z_collection[3,]
+t(z_collection[8,])%*%z_collection[3,]
+t(z_collection[9,])%*%z_collection[3,]
+
+t(z_collection[2,])%*%z_collection[1,]
+t(z_collection[4,])%*%z_collection[1,]
+t(z_collection[5,])%*%z_collection[1,]
+t(z_collection[6,])%*%z_collection[1,]
+t(z_collection[8,])%*%z_collection[1,]
+t(z_collection[9,])%*%z_collection[1,]
+
+t(x[, 1])%*%z_collection[6,]
+t(x[, 2])%*%z_collection[6,]
+t(x[, 3])%*%z_collection[6,]
+t(x[, 4])%*%z_collection[6,]
+t(x[, 5])%*%z_collection[6,]
+t(x[, 6])%*%z_collection[6,]
+t(x[, 7])%*%z_collection[6,]
+t(x[, 8])%*%z_collection[6,]
+t(x[, 9])%*%z_collection[6,]
+t(x[, 10])%*%z_collection[6,]
+
+t(x[, 1])%*%z_collection[4,]
+t(x[, 2])%*%z_collection[4,]
+t(x[, 3])%*%z_collection[4,]
+t(x[, 4])%*%z_collection[4,]
+t(x[, 5])%*%z_collection[4,]
+t(x[, 6])%*%z_collection[4,]
+t(x[, 7])%*%z_collection[4,]
+t(x[, 8])%*%z_collection[4,]
+t(x[, 9])%*%z_collection[4,]
+t(x[, 10])%*%z_collection[4,]
+
+t(x[, 1])%*%z_collection[1,]
+t(x[, 2])%*%z_collection[1,]
+t(x[, 3])%*%z_collection[1,]
+t(x[, 4])%*%z_collection[1,]
+t(x[, 5])%*%z_collection[1,]
+t(x[, 6])%*%z_collection[1,]
+t(x[, 7])%*%z_collection[1,]
+t(x[, 8])%*%z_collection[1,]
+t(x[, 9])%*%z_collection[1,]
+t(x[, 10])%*%z_collection[1,]
+
+t(x[, 1])%*%z_collection[10,]
+t(x[, 2])%*%z_collection[10,]
+t(x[, 3])%*%z_collection[10,]
+t(x[, 4])%*%z_collection[10,]
+t(x[, 5])%*%z_collection[10,]
+t(x[, 6])%*%z_collection[10,]
+t(x[, 7])%*%z_collection[10,]
+t(x[, 8])%*%z_collection[10,]
+t(x[, 9])%*%z_collection[10,]
+t(x[, 10])%*%z_collection[10,]
+##yes, orthogonal works
+
+#z_collection[1:4, 1:6]
+
+mtcars1 <- data.frame(scale(as.matrix(mtcars)) )
+plscheck <- plsr(mpg ~ 	cyl + disp + hp + drat + wt + qsec + vs + am + gear + carb , ncomp=10, data = mtcars1 )
+pls_score<-scores(plscheck)
+#loading.weights(plscheck)
+#coef(plscheck)
+
+z_collection[1,]/pls_score[,1]
+z_collection[2,]/pls_score[,2]
+z_collection[3,]/pls_score[,3]
+z_collection[4,]/pls_score[,4]
+z_collection[5,]/pls_score[,5]
+z_collection[6,]/pls_score[,6]
+z_collection[7,]/pls_score[,7]
+z_collection[8,]/pls_score[,8]
+z_collection[9,]/pls_score[,9]
+z_collection[10,]/pls_score[,10]
+#all get scalors, it means that each z_m from results obtained by myfunction() and plsr() indicates the same direction,
+#thus, myfunction gives the same results as plsr()
+
+
