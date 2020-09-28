@@ -1,0 +1,259 @@
+
+######################## implement LDA and QDA using standard methods 
+######################## then using sphering first
+######################## getting the hyperplane that is of equal distance to the centers of two cluster 
+######################## and transform back 
+
+library(MASS)
+library(mvtnorm)
+library(pracma)
+library(ggplot2)
+
+set.seed(123)
+####### implement LDA using standard methods #######
+### u_k and pi_k and common sigma
+x1<-rmvnorm(100,mean=c(1,1),sigma=diag(2))
+x2<-rmvnorm(100,mean=c(5,5),sigma=diag(2))
+x3<-rmvnorm(100,mean=c(9,9),sigma=diag(2))
+x<-rbind(x1,x2,x3)
+x<-cbind(x, c(rep(1,100), rep(2, 100), rep(3,100)))
+plot(x,col=x[,3], pch=8)
+n<-nrow(x)
+n1<-nrow(x1)
+n2<-nrow(x2)
+n3<-nrow(x3)
+n;n1;n2;n3
+u1<-colMeans(x1)
+u2<-colMeans(x2)
+u3<-colMeans(x3)
+u1;u2;u3
+mu1<-cbind(rep(u1[1], 100), rep(u1[2], 100))
+mu2<-cbind(rep(u2[1], 100), rep(u2[2], 100))
+mu3<-cbind(rep(u3[1], 100), rep(u3[2], 100))
+pi1=n1/n
+pi2=n2/n
+pi3=n3/n    #x1-u1 is done by minusing through column
+sigma<-1/(n-3)*(t(x1-mu1)%*%(x1-mu1)+t(x2-mu2)%*%(x2-mu2)+t(x3-mu3)%*%(x3-mu3)) ##here, sigma is 2by2 square matrix
+sigma #check common sigma
+### discriminant function and decision boundary, 0=b0+b11x1+b22x2
+#delta-1 vs delta-2
+b1_12<-solve(sigma)%*%(u2-u1)   #ginv(sigma) more generally 
+b0_12<--1/2*(u1+u2)%*%solve(sigma)%*%(u2-u1)+log(pi2/pi1)
+abline(-b0_12/b1_12[2], -b1_12[1]/b1_12[2], col=4)
+-b0_12/b1_12[2]
+-b1_12[1]/b1_12[2]
+#delta-1 vs delta-3
+b1_13<-solve(sigma)%*%(u3-u1)  
+b0_13<--1/2*(u1+u3)%*%solve(sigma)%*%(u3-u1)+log(pi3/pi1)
+abline(-b0_13/b1_13[2], -b1_13[1]/b1_13[2], col=5)
+-b0_13/b1_13[2]
+-b1_13[1]/b1_13[2]
+#delta-2 vs delta-3
+b1_23<-solve(sigma)%*%(u3-u2)  
+b0_23<--1/2*(u3+u2)%*%solve(sigma)%*%(u3-u2)+log(pi3/pi2)
+abline(-b0_23/b1_23[2], -b1_23[1]/b1_23[2], col=6)
+-b0_23/b1_23[2]
+-b1_23[1]/b1_23[2]
+
+####### implement QDA using standard methods #######
+### u_k and phi_k and sigma_k
+sigma1<-1/(n1-1)*(t(x1-mu1)%*%(x1-mu1)) 
+sigma2<-1/(n2-1)*(t(x2-mu2)%*%(x2-mu2)) 
+sigma3<-1/(n3-1)*(t(x3-mu3)%*%(x3-mu3)) 
+rref(sigma1)
+rref(sigma2)
+rref(sigma3)
+sigma1
+sigma2
+sigma3
+### discriminant function and decision boundary, b2x^2+b1x+b0=0
+#delta-1 vs delta-2
+b2_12<- -1/2*(solve(sigma2)-solve(sigma1))  #x1^2, x2^2, x1x2
+b1_12<- solve(sigma2)%*%u2-solve(sigma1)%*%u1
+b0_12<- -1/2*(u2%*%solve(sigma2)%*%u2-u1%*%solve(sigma1)%*%u1)-1/2*log(det(sigma2)/det(sigma1))+log(pi2/pi1)
+b2_12
+b1_12
+b0_12
+#par(new=TRUE)  #a * x1 ^ 2 + b * x2 ^ 2 + c * x1 * x2 + d * x + e * x2 + f = 0
+datanew1 <- transform(expand.grid(x1=seq(-2,12,0.05),
+                                  x2=seq(-2,12,0.05)),
+                      z=0.3505834*x1^2+0.06978259*x2^2+(0.1550500+0.18248473)*x1*x2+12.66092*x1+12.69142*x2-80.4263)
+#0.3505834*0.06978259-1/4*(0.1550500+0.18248473)^2
+#delta-1 vs delta-3
+b2_13<- -1/2*(solve(sigma3)-solve(sigma1)) 
+b1_13<- solve(sigma3)%*%u3-solve(sigma1)%*%u1
+b0_13<- -1/2*(u3%*%solve(sigma3)%*%u3-u1%*%solve(sigma1)%*%u1)-1/2*log(det(sigma3)/det(sigma1))+log(pi3/pi1)
+b2_13
+b1_13
+b0_13
+datanew2 <- transform(expand.grid(x1=seq(-2,12,0.05),
+                                  x2=seq(-2,12,0.05)),
+                      z=0.4493947*x1^2-0.2902769*x2^2+(0.1715963+0.1827248)*x1*x2+24.48900*x1+31.60281*x2-285.42)
+#delta-2 vs delta-3
+b2_23<- -1/2*(solve(sigma3)-solve(sigma2)) 
+b1_23<- solve(sigma3)%*%u3-solve(sigma2)%*%u2
+b0_23<- -1/2*(u3%*%solve(sigma3)%*%u3-u2%*%solve(sigma2)%*%u2)-1/2*log(det(sigma3)/det(sigma2))+log(pi3/pi2)
+b2_23
+b1_23
+b0_23
+datanew3 <- transform(expand.grid(x1=seq(-2,12,0.05),
+                                  x2=seq(-2,12,0.05)),
+                      z=0.09881130*x1^2-0.36005952*x2^2+(-0.01088839+0.02767482)*x1*x2+11.82808*x1+18.91139*x2-204.9937)
+
+xall <- data.frame(x)
+colnames(xall)<-c("x1", "x2", "indicator")
+ggplot() + geom_point(data = xall, aes(x = x1, y = x2), shape = 1, size = 1.5, color = factor(xall$indicator) ) +
+          geom_abline(intercept = 6.085553, slope = -1.016957, color="red", linetype="dashed", size=1.5) +     #LDA
+          geom_abline(intercept = 10.08394, slope = -1.011946, color="pink", linetype="dashed", size=1.5) +    #LDA
+          geom_abline(intercept = 14.12309, slope = -1.006884, color="purple", linetype="dashed", size=1.5) +  #LDA
+          stat_contour(data = datanew1, aes(x = x1, y = x2, z = z, colour = 7), breaks = "0", size = 1)  +
+          stat_contour(data = datanew2, aes(x = x1, y = x2, z = z, colour = 7), breaks = "0", size = 1)  +
+          stat_contour(data = datanew3, aes(x = x1, y = x2, z = z, colour = 7), breaks = "0", size = 1)  +
+          theme(legend.position= "none") 
+#contour(x = x1, y = x2, z = z, data=datanew, xlab = "x1", ylab = "x2")
+#g1 <- qplot(x1,x2,z=z,data=datanew,colour=factor(..level..),geom="contour")
+#g1 + scale_colour_discrete(breaks="0",limits=c("0","0"),na.value=NA,  guide="none")
+
+
+
+set.seed(123)
+######## then using sphering first, getting the hyperplane that is of equal distance to the centers of two cluster 
+######## and transform back 
+###LDA sphering
+x1<-rmvnorm(100,mean=c(1,1),sigma=matrix(c(0.6, 0.5, 0.5, 0.6), 2) )
+x2<-rmvnorm(100,mean=c(5,1),sigma=matrix(c(0.6, 0.5, 0.5, 0.6), 2) )
+x<-rbind(x1,x2)
+x<-cbind(x, c(rep(1,100), rep(2, 100)))
+plot(x,col=x[,3], pch=8)
+n<-nrow(x)
+n1<-nrow(x1)
+n2<-nrow(x2)
+n;n1;n2
+u1<-colMeans(x1)
+u2<-colMeans(x2)
+u1;u2
+mu1<-cbind(rep(u1[1], 100), rep(u1[2], 100))
+mu2<-cbind(rep(u2[1], 100), rep(u2[2], 100))
+pi1=n1/n
+pi2=n2/n
+sigma<-1/(n-2)*(t(x1-mu1)%*%(x1-mu1)+t(x2-mu2)%*%(x2-mu2))  
+sigma
+#sigma eigenvalue decompsition
+#ev <- eigen( matrix(c(0.6, 0.5, 0.5, 0.6), 2) ) 
+ev <- eigen( sigma ) 
+U <- ev$vectors
+L <- ev$values
+D<-diag(L)
+U
+D
+U%*%D%*%t(U)   #sigma=UDU^t
+Dd<-diag(L^(-1/2) )
+x_star <- t(Dd%*%t(U)%*%t(x[,1:2]) )  
+x_star<- cbind(x_star, c(rep(3,100), rep(4, 100)))
+#par(new=TRUE)
+plot(x_star,col=x_star[,3], pch=8)   #x star plot
+u1_star <- Dd%*%t(U)%*%u1
+u2_star <- Dd%*%t(U)%*%u2
+#delta-1 vs delta-2
+b1_12<- u2_star - u1_star   
+b0_12<- -1/2*t(u1_star+u2_star)%*%(u2_star-u1_star)+log(pi2/pi1)
+abline(-b0_12/b1_12[2], -b1_12[1]/b1_12[2], col="red")   #x star decision boundary
+-b0_12/b1_12[2]
+-b1_12[1]/b1_12[2]
+#moveback
+newb1<-U%*%t(Dd)%*%b1_12
+plot(x,col=x[,3], pch=8)
+abline(-b0_12/newb1[2], -newb1[1]/newb1[2], col="blue")
+-b0_12/newb1[2]
+-newb1[1]/newb1[2]
+midpoint<-(u1+u2)/2
+midpoint
+midpoint%*%newb1+b0_12
+#check, midpoint of u1 and u2 is also on the line
+xall1 <- data.frame(x)
+colnames(xall1)<-c("x1", "x2", "indicator")
+xall2 <- data.frame(x_star)
+colnames(xall2)<-c("x1", "x2", "indicator")
+ggplot() + geom_point(data = xall1, aes(x = x1, y = x2), shape = 1, size = 1, color = factor(xall1$indicator) ) +
+  geom_point(data = xall2, aes(x = x1, y = x2), shape = 2, size = 1, color = factor(xall2$indicator) )     +
+  geom_abline(intercept = -5.601913, slope = 0.3293734, color="green", linetype="dashed", size=1) +   
+  geom_abline(intercept = -2.975531, slope = 1.311191, color="black", linetype="solid", size=1)       #LDA
+
+  
+set.seed(123)
+###QDA sphering
+x1<-rmvnorm(100,mean=c(1,1),sigma=matrix(c(0.55, 0.35, 0.35, 0.55), 2) )
+x2<-rmvnorm(100,mean=c(5,1),sigma=matrix(c(0.6, 0.30, 0.30, 0.6), 2) )   #tried different sigma settings
+#x1<-rmvnorm(100,mean=c(1,1),sigma=matrix(c(0.6, 0.5, 0.5, 0.6), 2) )
+#x2<-rmvnorm(100,mean=c(5,1),sigma=matrix(c(0.6, 0.5, 0.5, 0.6), 2) )
+set.seed(1)
+#x1<-rmvnorm(100,mean=c(1,1),sigma=matrix(c(1.5, 0, 0, 1.5), 2) )
+#x2<-rmvnorm(100,mean=c(5,1),sigma=matrix(c(0.6, 0.30, 0.30, 0.6), 2) )
+x<-rbind(x1,x2)
+x<-cbind(x, c(rep(1,100), rep(2, 100)))
+#plot(x,col=x[,3], pch=8)
+n<-nrow(x)
+n1<-nrow(x1)
+n2<-nrow(x2)
+n;n1;n2
+u1<-colMeans(x1)
+u2<-colMeans(x2)
+u1;u2
+mu1<-cbind(rep(u1[1], 100), rep(u1[2], 100))
+mu2<-cbind(rep(u2[1], 100), rep(u2[2], 100))
+pi1=n1/n
+pi2=n2/n
+sigma1<-1/(n1-1)*(t(x1-mu1)%*%(x1-mu1))
+sigma2<-1/(n2-1)*(t(x2-mu2)%*%(x2-mu2))
+sigma1   #cov(x2)
+sigma2
+#sigma eigenvalue decompsition
+ev1 <- eigen( sigma1) 
+U1 <- ev1$vectors
+L1 <- ev1$values
+D1<-diag(L1)
+U1
+D1
+U1%*%D1%*%t(U1)   #sigma=UDU^t
+ev2 <- eigen( sigma2) 
+U2 <- ev2$vectors
+L2 <- ev2$values
+D2<-diag(L2)
+U2
+D2
+U2%*%D2%*%t(U2)   #sigma=UDU^t
+Dd1<-diag(L1^(-1/2) )
+Dd2<-diag(L2^(-1/2) )
+x_star1 <- t(Dd1%*%t(U1)%*%t(x1) )  
+x_star2 <- t(Dd2%*%t(U2)%*%t(x2) )  
+x_star <- cbind(rbind(x_star1, x_star2), c(rep(3,100), rep(4, 100)))
+plot(x_star,col=x_star[,3], pch=1)   #x star plot
+u1_star <- Dd1%*%t(U1)%*%u1
+u2_star <- Dd2%*%t(U2)%*%u2
+#delta-1 vs delta-2
+b1_12<- u2_star - u1_star   
+b0_12<- -1/2*(t(u2_star)%*%u2_star-t(u1_star)%*%u1_star)-1/2*log(det(sigma2)/det(sigma1))+log(pi2/pi1)
+abline(-b0_12/b1_12[2], -b1_12[1]/b1_12[2], col="red")   #x star decision boundary
+-b0_12/b1_12[2]
+-b1_12[1]/b1_12[2]
+#move back
+newb11<-U1%*%t(Dd1)%*%b1_12
+plot(x,col=x[,3], pch=8)
+abline(-b0_12/newb11[2], -newb11[1]/newb11[2], col="blue")
+-b0_12/newb11[2]
+-newb11[1]/newb11[2]
+newb12<-U2%*%t(Dd2)%*%b1_12
+abline(-b0_12/newb12[2], -newb12[1]/newb12[2], col="purple")
+-b0_12/newb12[2]
+-newb12[1]/newb12[2]
+
+xall1 <- data.frame(x)
+colnames(xall1)<-c("x1", "x2", "indicator")
+xall2 <- data.frame(x_star)
+colnames(xall2)<-c("x1", "x2", "indicator")
+ggplot() + geom_point(data = xall1, aes(x = x1, y = x2), shape = 1, size = 1, color = factor(xall1$indicator) ) +
+  geom_point(data = xall2, aes(x = x1, y = x2), shape = 2, size = 1, color = factor(xall2$indicator) )     +
+  geom_abline(intercept = -b0_12/b1_12[2], slope = -b1_12[1]/b1_12[2], color="green", linetype="dashed", size=1)   +    #line on star level
+  geom_abline(intercept = -b0_12/newb11[2], slope = -newb11[1]/newb11[2], color="black", linetype="solid", size=1)   +  
+  geom_abline(intercept = -b0_12/newb12[2], slope = -newb12[1]/newb12[2], color="red", linetype="solid", size=1)   
+
