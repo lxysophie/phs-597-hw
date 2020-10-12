@@ -1,0 +1,109 @@
+
+
+#install.packages('matrixcalc')
+library(quadprog)
+library(MASS)
+library(mvtnorm)
+library(pracma)
+library(ggplot2)
+library(matrixcalc)
+
+######################## implement support vector classifier using the Lagrange dual ###########################
+
+set.seed(123)
+
+x1<-rmvnorm(10,mean=c(1,1),sigma=matrix(c(1, 0.5, 0.5, 1), 2) )
+x2<-rmvnorm(10,mean=c(5,1),sigma=matrix(c(1, 0.5, 0.5, 1), 2) )
+#x1<-rmvnorm(10,mean=c(1,1),sigma=diag(2) )
+#x2<-rmvnorm(10,mean=c(5,1),sigma=diag(2) )
+x<-rbind(x1,x2)
+y<-c(rep(-1, 10), rep(1, 10))
+plot(x,pch=8,col=y+2)
+
+### SVM dual formulation
+G<-matrix(NA, nrow=length(x[,1]), ncol=length(x[,1]))
+for (i in 1:length(x[,1])) {
+    for (j in 1:length(x[,1])) {
+       G[i,j]=y[i]*y[j]*t(x[i,])%*%x[j,]   #symmetric
+    }
+}
+#t(x[1,])%*%x[2,]
+#x[2,]%*%t(x[1,])
+is.positive.semi.definite(G)
+
+G<-G+0.0001*diag(20)  #slight pertubance to SVM data
+e<-rep(1, length(x[,1]))
+
+isSymmetric(G)
+is.positive.definite(G, tol=1e-8)
+is.positive.semi.definite(G)
+determinant(G)
+
+### solving objective funtion, that is, maximize L over alpha>=0 OR minimize -L over alpha>=0
+### min 1/2α⊤Gα − e⊤α 
+### contraints y^T*alpha=0 and alpha_i>=0, 
+### totally 21 constraints, as we have 20 alpha_i
+A<-cbind(y, diag(20))   #since AT alpha >= b0, and alpha is vector in column
+b0<-rep(0, 21)
+#solve problem in the form min(−dT b + 1/2bT D b) with the constraints AT b >= b0.
+output<-solve.QP(Dmat=G, dvec=e, Amat=A, bvec=b0, meq=1, factorized=FALSE)
+output<-solve.QP(Dmat=G, dvec=e, Amat=A, bvec=b0, meq=1, factorized=FALSE)
+#get all the alpha_i
+all.alpha<-output$solution
+all.alpha
+#use support points to calculate b in order to get hyperplane=sum(alpha_i*y_i*t(x_i)*x)+b
+#from the solution, there are 3 support points
+alpha.support<-rep(NA, length(all.alpha))
+for (i in 1:length(all.alpha)) {
+  if (all.alpha[i] < 1e-8) {alpha.support[i] =0 }
+  else { alpha.support[i] =1 }
+}
+alpha.support   #plot(x,pch=8,col=alpha.support+1)
+#data.alpha<-cbind(x, y, all.alpha, alpha.support)
+data.alpha<-data.frame(cbind(x, y, all.alpha, alpha.support))
+data.alpha.sub <- data.alpha[data.alpha$alpha.support==1,]
+
+### for solving b, get some ideas from online
+### L(α) and y^T*α=0, get L(α, b)=1/2α⊤gα − e⊤α + b y^Tα
+### derivative with respect to α, get g*α+by=e
+x.sub<-as.matrix(data.alpha.sub[,1:2])
+g<-matrix(NA, nrow=3, ncol=3)
+for (i in 1:3) {
+  for (j in 1:3) {
+    g[i,j]=data.alpha.sub[i,3]*data.alpha.sub[j,3]*t(x.sub[i,])%*%x.sub[j,]   #symmetric
+  }
+}
+isSymmetric(g)
+is.positive.definite(g, tol=1e-8)
+is.positive.semi.definite(g)
+determinant(g)
+
+g<-g+0.0001*diag(3)
+is.positive.definite(g, tol=1e-8)
+
+#to solve g*α+by=e, 
+y.sub=as.vector(data.alpha.sub[,3])
+v=chol(g)  #upper
+b=( t(y.sub) %*% solve(v, solve(t(v), rep(1,3) ) ) )/( t(y.sub) %*% solve(v, solve(t(v), y.sub ) )  )
+#b=( t(y.sub)%*%v/(t(v)/e) )/( t(y.sub)%*%v/(t(v)/y.sub) )
+b
+#another way to check
+alpha.sub<-as.vector(data.alpha.sub[,4])
+Beta <- apply(alpha.sub*y.sub*x.sub, 2, sum)
+y.sub - x.sub%*%Beta
+mean(y.sub - x.sub%*%Beta)
+b <- mean(y.sub - x.sub%*%Beta)
+b
+
+#figure
+plot(x,pch=8,col=y+2)
+#hyperplane: B^t*X+b=0 and margins B^t*X+b=+1 and -1
+#here, b1x1+b2x2+b=0, x2=-b1/b2x1-b/b2, and x2=-b1/b2x1-(b+1)/b2, x2=-b1/b2x1-(b-1)/b2, 
+abline(a=-b/Beta[2], b=-Beta[1]/Beta[2], col="blue")
+abline(a=-(b+1)/Beta[2], b=-Beta[1]/Beta[2], col="red")
+abline(a=-(b-1)/Beta[2], b=-Beta[1]/Beta[2], col="red")
+#3 support points
+
+
+
+
