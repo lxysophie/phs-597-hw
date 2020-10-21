@@ -105,5 +105,20 @@ abline(a=-(b-1)/Beta[2], b=-Beta[1]/Beta[2], col="red")
 #3 support points
 
 
-
+###################### compare with R svm() in package 'e1071' ########################
+#install.packages('e1071')
+library(e1071)
+dat <- data.frame(x=x, y=as.factor(y))
+ggplot(data = dat, aes(x = x.1, y = x.2, color = y, shape = y)) + 
+  geom_point(size = 2) +
+  scale_color_manual(values=c("#000000", "#FF0000")) +
+  theme(legend.position = "none")
+#Fit Support Vector Machine model to data set
+svmfit <- svm(y~., data = dat, kernel = "linear", scale = FALSE)
+plot(svmfit, dat)
+dat.re<-data.frame(x=cbind(x[,2], x[,1]), y=as.factor(y))
+svmfit <- svm(y~., data = dat.re, kernel = "linear", scale = FALSE)
+svm(y~., data = dat.re, kernel = "linear", scale = FALSE)
+##Yes, the same as implemented, 3 support vectors
+plot(svmfit, dat.re)
 
