@@ -122,3 +122,14 @@ summary(svmfit)
 #Yes, the same as implemented, 3 support vectors
 plot(svmfit, dat.re)
 
+# get back the linear coefficients
+beta = drop(t(svmfit$coefs)%*%x[svmfit$index,])
+beta0 = svmfit$rho
+
+#plot(xgrid, col = c("red", "blue")[as.numeric(ygrid)], pch = 20, cex = .2)
+plot(x,pch=8,col=y+2)
+points(x, col = y + 2, pch = 19)
+points(x[svmfit$index,], pch = 5, cex = 2)
+abline(beta0 / beta[2], -beta[1] / beta[2])
+abline((beta0 - 1) / beta[2], -beta[1] / beta[2], lty = 2)
+abline((beta0 + 1) / beta[2], -beta[1] / beta[2], lty = 2)
