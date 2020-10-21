@@ -118,7 +118,7 @@ svmfit <- svm(y~., data = dat, kernel = "linear", scale = FALSE)
 plot(svmfit, dat)
 dat.re<-data.frame(x=cbind(x[,2], x[,1]), y=as.factor(y))
 svmfit <- svm(y~., data = dat.re, kernel = "linear", scale = FALSE)
-svm(y~., data = dat.re, kernel = "linear", scale = FALSE)
-##Yes, the same as implemented, 3 support vectors
+summary(svmfit)
+#Yes, the same as implemented, 3 support vectors
 plot(svmfit, dat.re)
 
