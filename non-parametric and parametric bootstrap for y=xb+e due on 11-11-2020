@@ -1,0 +1,83 @@
+
+
+library(MASS)
+library(mvtnorm)
+
+
+############## implement parametric and non-parametric bootstrap to assess the conference interval for the model Y=Xb + e; 
+############## where e is standard normal distribution
+############## X is a multivariate normal distribution
+############## and, you can vary the value for b
+
+#set.seed(123)
+
+b<-c(0.8, 0.5, 1, 1.5)  # try change b, c(1.2,-1,3,4)     c(0.7, -1,1, 2)
+x<-cbind(rep(1,10), rmvnorm(10, mean=c(0.3, 0.8, 1.4), sigma=diag(3)*0.5) )   #try change sample size, 10, 20, 50, 100, 1000
+y<-x%*%b + rnorm(nrow(x), 0, 0.8)  
+
+###### non-parametric bootstrap
+n.boot=1000
+beta.hat <- matrix(NA, nrow=n.boot, ncol=4)
+for (i in 1:n.boot) {
+  index <- sample(1:nrow(x), nrow(x), replace = TRUE)
+  x.bootstrap<-x[index, ]
+  y.bootstrap<-y[index, ]
+  beta.hat[i,] <- solve(t(x.bootstrap)%*%x.bootstrap)%*%t(x.bootstrap)%*%y.bootstrap
+}
+quantile(beta.hat[,1], c(0.025, 0.975)) 
+quantile(beta.hat[,2], c(0.025, 0.975)) 
+quantile(beta.hat[,3], c(0.025, 0.975)) 
+quantile(beta.hat[,4], c(0.025, 0.975)) 
+
+###### parametric bootstrap
+beta_hat <- coef(lm(y~x[,2] + x[,3] + x[,4]) )
+sigma2.hat <- 1/(nrow(x)-ncol(x))*sum((y-x%*%beta_hat)^2)  #least square estimate of sigma square, called sigma2.hat
+
+beta.hat.star <- matrix(NA, nrow=n.boot, ncol=4)
+for (i in 1:n.boot) {
+  y.star <- rep(NA, nrow(x))                            #we "simulate" y.star for each bootstrap dataset
+  for (j in 1:nrow(x)) {                                 #sample size N=nrow(x)
+    y.star[j] = x[j,]%*%beta_hat + rnorm(1, mean=0, sd=sqrt(sigma2.hat) )   #here, sigma.star follow norm(0,sigma2)
+  }
+  beta.hat.star[i,] <- solve(t(x)%*%x)%*%t(x)%*%y.star
+}
+quantile(beta.hat.star[,1], c(0.025, 0.975)) 
+quantile(beta.hat.star[,2], c(0.025, 0.975)) 
+quantile(beta.hat.star[,3], c(0.025, 0.975)) 
+quantile(beta.hat.star[,4], c(0.025, 0.975)) 
+
+###### compare
+b  #true beta
+
+quantile(beta.hat[,1], c(0.025, 0.975)) 
+quantile(beta.hat.star[,1], c(0.025, 0.975))   
+
+quantile(beta.hat[,2], c(0.025, 0.975)) 
+quantile(beta.hat.star[,2], c(0.025, 0.975)) 
+
+quantile(beta.hat[,3], c(0.025, 0.975)) 
+quantile(beta.hat.star[,3], c(0.025, 0.975)) 
+
+quantile(beta.hat[,4], c(0.025, 0.975)) 
+quantile(beta.hat.star[,4], c(0.025, 0.975)) 
+
+### CI length
+quantile(beta.hat[,1], c(0.025, 0.975))[2]-quantile(beta.hat[,1], c(0.025, 0.975))[1]
+quantile(beta.hat.star[,1], c(0.025, 0.975))[2]-quantile(beta.hat.star[,1], c(0.025, 0.975))[1]
+
+quantile(beta.hat[,2], c(0.025, 0.975))[2]-quantile(beta.hat[,2], c(0.025, 0.975))[1]
+quantile(beta.hat.star[,2], c(0.025, 0.975))[2]-quantile(beta.hat.star[,2], c(0.025, 0.975))[1]
+
+quantile(beta.hat[,3], c(0.025, 0.975))[2]-quantile(beta.hat[,3], c(0.025, 0.975))[1]
+quantile(beta.hat.star[,3], c(0.025, 0.975))[2]-quantile(beta.hat.star[,3], c(0.025, 0.975))[1]
+
+quantile(beta.hat[,4], c(0.025, 0.975))[2]-quantile(beta.hat[,3], c(0.025, 0.975))[1]
+quantile(beta.hat.star[,4], c(0.025, 0.975))[2]-quantile(beta.hat.star[,3], c(0.025, 0.975))[1]
+
+#CI length is narrow using parametric bootstrap. 
+#This is obvious when sample size N is small like 10, 20; 
+#when sample size is large such as 50, 100, 1000, it's not obvious as the small sample size condition, difference on 0.01 even 0.001 scale
+#I think because here we know the true distribution of the data 
+#and then parametric bootstrap could contain more inforamtion of the population distribution compared to non-parametric bootstrap
+#because non-parametric bootstrap averagely only use 2/3 of the data each time.
+
