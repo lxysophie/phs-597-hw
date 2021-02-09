@@ -1,0 +1,279 @@
+
+########## HW implement PPR with natural cubic spline due Feb-8-2021 ###########
+
+###########################################################
+###### implement PPR yourself. For this: you would need 
+###### 1) complete the derivation for the coefficients in front of the basis for natural cubic splines. 
+###### 2) complete the derivation for updating \omega given g. 
+###### 3) implement iterative algorithms for updating \omega and g. 
+###### consult with this R function for comparison https://stat.ethz.ch/R-manual/R-devel/library/stats/html/ppr.html 
+
+######each data point is a knot
+
+library(MASS)
+#library(matlib)
+
+set.seed(1)
+
+n <- 30
+x1 <- rnorm(n, 0, 1)
+x2 <- rnorm(n, 0.35, 1)
+
+#x1 <- runif(n, 0, 10)
+#x2 <- runif(n, 0, 10)
+
+#y <- exp(x1+x2)/(1+exp(x1+x2)) + rnorm(n, 0, 0.5)
+y <- 1/(1+exp(-5*((x1+x2)/sqrt(2)-0.5))) + rnorm(n, 0, 0.1)
+data <- data.frame(x1, x2,y)
+x<-cbind(x1,x2)
+
+omega0=c(sqrt(2)/2, sqrt(2)/2)   #self-defined initial values for omega !!!!!!unit length
+v0=as.matrix(cbind(x1,x2))%*%omega0
+knot=sort(as.vector(v0 ) )   #every data point is a knot
+nk=length(knot)
+k_m<-matrix(rep(0,n*nk), nrow=n, ncol=nk)
+for (i in 1:length(v0)) {
+     for (j in 1:nk) {   #column number is the k number
+       if(v0[i]>= knot[j]) {k_m[i, j]=(v0[i]-knot[j])^3}
+     }
+}
+#k_m
+n3<-rep(0,n)
+n3<-n3+(k_m[,1] - k_m[,nk])/(knot[1]-knot[nk])
+for (i in 1:(nk-2) ) {
+   n3 = n3 - (k_m[,1+i] - k_m[,nk])/(knot[1+i]-knot[nk])
+}
+#DM$n3 <- (k1 - k3)/(knot[1]-knot[3]) - (k2 - k3)/(knot[2]-knot[3])
+#DM <- data.frame(cbind(rep(1, n), v0))  
+#DM <- as.matrix(DM)
+DM <- cbind(rep(1, n), v0, n3)    #design matrix 
+
+#least square estimates 
+beta_g <- ginv(t(DM) %*% DM) %*% t(DM) %*% y
+beta_g
+
+
+
+check_knot <- function(x){
+  if (x<knot[1]) { ng=1 }
+  else if (x>=knot[nk]) { ng=nk+1 }
+  else { for (i in 1:(nk-1) ) {
+    if ( knot[i+1] >x & x>= knot[i] ) { ng=i+1 }
+    else {next}
+  }   
+  }
+  ng
+}
+
+### update omega for the 1st time
+omega_old=omega0
+v_old=as.vector(  as.matrix(cbind(x1,x2))%*%omega_old  )
+numerator<-0
+denominator<-0
+ng_seq<-rep(NA, n)
+for (i in 1:n) {
+  ng_seq[i] = check_knot( v_old[i] )
+}
+ng_seq
+
+for (i in 1:n) {
+  if(ng_seq[i]==1) {
+    gF<- function(x){  beta_g[1]+beta_g[2]*x  } 
+    gDF<- beta_g[2] 
+    numerator=numerator+x[i,]*gDF^2*(v_old[i]+(y[i]-gF(v_old[i]))/(gDF))
+    denominator=denominator+gDF^2*x[i,]%*%t(x[i,])
+  }
+  else if(ng_seq[i]==2) {
+    gF<- function(x){  beta_g[1]+beta_g[2]*x + beta_g[3]*( (x-knot[1])^3/(knot[1]-knot[nk]) )  } 
+    gDF<- function(x){  beta_g[2]+3*beta_g[3]*(x-knot[1])^2/(knot[1]-knot[nk])   } 
+    numerator=numerator+x[i,]*gDF(v_old[i])^2*(v_old[i]+(y[i]-gF(v_old[i]))/(gDF(v_old[i])))
+    denominator=denominator+gDF(v_old[i])^2*x[i,]%*%t(x[i,])      
+  }
+  else if(ng_seq[i]==nk+1) {
+    gF<- function(x){  
+          part1 = beta_g[1]+beta_g[2]*x + beta_g[3]*( (x-knot[1])^3/(knot[1]-knot[nk]) ) 
+          part2 = 0
+          part3 = -(x-knot[nk])^3/(knot[1]-knot[nk])
+          for (j in 2:(nk-1) ) {
+               part2 = part2 - (x-knot[j])^3/(knot[j]-knot[nk])
+               part3 = part3 + (x-knot[nk])^3/(knot[j]-knot[nk])
+         }
+         part1 + beta_g[3] * (part2 + part3)      
+      } 
+    gDF<- function(x){   
+           part1 = beta_g[2] + 3*beta_g[3]*( (x-knot[1])^2/(knot[1]-knot[nk]) ) 
+           part2 = 0
+           part3 = -3*(x-knot[nk])^2/(knot[1]-knot[nk])
+           for (j in 2:(nk-1) ) {
+                part2 = part2 - 3*(x-knot[j])^2/(knot[j]-knot[nk])
+                part3 = part3 + 3*(x-knot[nk])^2/(knot[j]-knot[nk])
+           }
+           part1 + beta_g[3] * (part2 + part3)
+      } 
+    numerator=numerator+x[i,]*gDF(v_old[i])^2*(v_old[i]+(y[i]-gF(v_old[i]))/(gDF(v_old[i])))
+    denominator=denominator+gDF(v_old[i])^2*x[i,]%*%t(x[i,])      
+  }
+  else  {
+    gF<- function(x){  
+           part1 = beta_g[1]+beta_g[2]*x + beta_g[3]*( (x-knot[1])^3/(knot[1]-knot[nk]) ) 
+           part2 = 0
+           for (j in 2:(ng_seq[i]-1) ) {
+                part2 = part2 - (x-knot[j])^3/(knot[j]-knot[nk])
+           }
+           part1 + beta_g[3] * part2
+      } 
+    gDF<- function(x){  
+            part1 = beta_g[2] + 3*beta_g[3]*( (x-knot[1])^2/(knot[1]-knot[nk]) ) 
+            part2 = 0
+            for (j in 2:(ng_seq[i]-1) ) {
+                part2 = part2 - 3*(x-knot[j])^2/(knot[j]-knot[nk])
+            }
+            part1 + beta_g[3] * part2
+      } 
+    numerator=numerator+x[i,]*gDF(v_old[i])^2*(v_old[i]+(y[i]-gF(v_old[i]))/(gDF(v_old[i])))
+    denominator=denominator+gDF(v_old[i])^2*x[i,]%*%t(x[i,])      
+  }
+}
+numerator
+denominator
+omega_update=numerator%*%solve(denominator)
+omega_update=omega_update/(omega_update[1])
+scalar <- function(x) {x / sqrt(sum(x^2))}
+omega_update=scalar(omega_update)
+omega_update
+difference= abs(omega_update-omega_old) 
+difference
+
+
+
+############## set up the big loop
+for (ii in 1:1000){
+  omega_old=omega_update
+  v_old= as.vector( omega_old %*% t(cbind(x1,x2)) )
+  knot=sort(as.vector(v_old ) )   #every data point is a knot
+  nk=length(knot)
+  k_m<-matrix(rep(0,n*nk), nrow=n, ncol=nk)
+  for (i in 1:length(v_old)) {
+    for (j in 1:nk) {   #column number is the k number
+      if(v_old[i]>= knot[j]) {k_m[i, j]=(v_old[i]-knot[j])^3}
+    }
+  }
+  n3<-rep(0,n)
+  n3<-n3+(k_m[,1] - k_m[,nk])/(knot[1]-knot[nk])
+  for (i in 1:(nk-2) ) {
+    n3 = n3 - (k_m[,1+i] - k_m[,nk])/(knot[1+i]-knot[nk])
+  }
+  DM <- cbind(rep(1, n), v_old, n3)    #design matrix 
+  
+  #least square estimates 
+  beta_g <- ginv(t(DM) %*% DM) %*% t(DM) %*% y
+  
+  numerator<-0
+  denominator<-0
+  ng_seq<-rep(NA, n)
+  for (i in 1:n) {
+    ng_seq[i] = check_knot( v_old[i] )
+  }
+#  ng_seq
+  
+  for (i in 1:n) {
+    if(ng_seq[i]==1) {
+      gF<- function(x){  beta_g[1]+beta_g[2]*x  } 
+      gDF<- beta_g[2] 
+      numerator=numerator+x[i,]*gDF^2*(v_old[i]+(y[i]-gF(v_old[i]))/(gDF))
+      denominator=denominator+gDF^2*x[i,]%*%t(x[i,])
+    }
+    else if(ng_seq[i]==2) {
+      gF<- function(x){  beta_g[1]+beta_g[2]*x + beta_g[3]*( (x-knot[1])^3/(knot[1]-knot[nk]) )  } 
+      gDF<- function(x){  beta_g[2]+3*beta_g[3]*(x-knot[1])^2/(knot[1]-knot[nk])   } 
+      numerator=numerator+x[i,]*gDF(v_old[i])^2*(v_old[i]+(y[i]-gF(v_old[i]))/(gDF(v_old[i])))
+      denominator=denominator+gDF(v_old[i])^2*x[i,]%*%t(x[i,])      
+    }
+    else if(ng_seq[i]==nk+1) {
+      gF<- function(x){  
+        part1 = beta_g[1]+beta_g[2]*x + beta_g[3]*( (x-knot[1])^3/(knot[1]-knot[nk]) ) 
+        part2 = 0
+        part3 = -(x-knot[nk])^3/(knot[1]-knot[nk])
+        for (j in 2:(nk-1) ) {
+          part2 = part2 - (x-knot[j])^3/(knot[j]-knot[nk])
+          part3 = part3 + (x-knot[nk])^3/(knot[j]-knot[nk])
+        }
+        part1 + beta_g[3] * (part2 + part3)      
+      } 
+      gDF<- function(x){   
+        part1 = beta_g[2] + 3*beta_g[3]*( (x-knot[1])^2/(knot[1]-knot[nk]) ) 
+        part2 = 0
+        part3 = -3*(x-knot[nk])^2/(knot[1]-knot[nk])
+        for (j in 2:(nk-1) ) {
+          part2 = part2 - 3*(x-knot[j])^2/(knot[j]-knot[nk])
+          part3 = part3 + 3*(x-knot[nk])^2/(knot[j]-knot[nk])
+        }
+        part1 + beta_g[3] * (part2 + part3)
+      } 
+      numerator=numerator+x[i,]*gDF(v_old[i])^2*(v_old[i]+(y[i]-gF(v_old[i]))/(gDF(v_old[i])))
+      denominator=denominator+gDF(v_old[i])^2*x[i,]%*%t(x[i,])      
+    }
+    else  {
+      gF<- function(x){  
+        part1 = beta_g[1]+beta_g[2]*x + beta_g[3]*( (x-knot[1])^3/(knot[1]-knot[nk]) ) 
+        part2 = 0
+        for (j in 2:(ng_seq[i]-1) ) {
+          part2 = part2 - (x-knot[j])^3/(knot[j]-knot[nk])
+        }
+        part1 + beta_g[3] * part2
+      } 
+      gDF<- function(x){  
+        part1 = beta_g[2] + 3*beta_g[3]*( (x-knot[1])^2/(knot[1]-knot[nk]) ) 
+        part2 = 0
+        for (j in 2:(ng_seq[i]-1) ) {
+          part2 = part2 - 3*(x-knot[j])^2/(knot[j]-knot[nk])
+        }
+        part1 + beta_g[3] * part2
+      } 
+      numerator=numerator+x[i,]*gDF(v_old[i])^2*(v_old[i]+(y[i]-gF(v_old[i]))/(gDF(v_old[i])))
+      denominator=denominator+gDF(v_old[i])^2*x[i,]%*%t(x[i,])      
+    }
+  }
+  #numerator
+  #denominator
+  omega_update=numerator%*%solve(denominator)
+  omega_update=scalar(omega_update)   ###!!!!!! unit length
+  omega_update
+  difference=as.vector(abs(omega_update-omega_old) )          
+  list_all=c(beta_g, omega_old, difference)
+  if( max(difference[1], difference[2]) < 1e-6) { break  }
+}
+#list_all
+list_all
+omega_old
+omega_update
+
+
+
+######################## compare with R function
+
+set.seed(1)
+
+n <- 30
+x1 <- rnorm(n, 0, 1)
+x2 <- rnorm(n, 0.35, 1)
+
+#x1 <- runif(n, 0, 10)
+#x2 <- runif(n, 0, 10)
+
+#y <- exp(x1+x2)/(1+exp(x1+x2)) + rnorm(n, 0, 0.5)
+y <- 1/(1+exp(-5*((x1+x2)/sqrt(2)-0.5))) + rnorm(n, 0, 0.1)
+data <- data.frame(x1, x2,y)
+
+fit.ppr<-ppr( y ~ x1 + x2,   data = data, nterms = 1, sm.method = c("spline"),  trace=TRUE)
+fit.ppr
+summary(fit.ppr)
+
+
+
+### these two results are similarly to each other, the difference is in the 0.01 level.
+
+
+
+
+
